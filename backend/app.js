@@ -9,6 +9,10 @@ const errorHandler = require('./middlewares/errorHandler');
 // router imports
 const authRouter = require('./routes/auth');
 const leadsRouter = require('./routes/leads');
+const campaignsRouter = require('./routes/campaigns');
+const automationsRouter = require('./routes/automations');
+const templatesRouter = require('./routes/templates');
+const webhooksRouter = require('./routes/webhooks');
 
 const app = express();
 
@@ -22,6 +26,11 @@ app.use(rateLimiter);
 // mount api routes
 app.use('/api/auth', authRouter);
 app.use('/api/leads', leadsRouter);
+app.use('/api/campaigns', campaignsRouter);
+app.use('/api/automations', automationsRouter);
+app.use('/api/templates', templatesRouter);
+// Webhooks tidak perlu auth middleware (sudah di-verify via webhook token)
+app.use('/api/webhooks', webhooksRouter);
 
 // basic health routes for browser/manual checks
 app.get('/', (req, res) => {

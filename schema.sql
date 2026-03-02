@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS lead_status_history (
   old_status lead_status,
   new_status lead_status NOT NULL,
   changed_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  reason TEXT,
   changed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   CONSTRAINT chk_status_changed CHECK (old_status IS DISTINCT FROM new_status)
 );
@@ -102,30 +103,55 @@ CREATE TABLE IF NOT EXISTS messages (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   lead_id UUID NOT NULL REFERENCES leads(id) ON DELETE CASCADE,
   campaign_id UUID REFERENCES campaigns(id) ON DELETE SET NULL,
-  meta_message_id TEXT UNIQUE,
+  automation_id UUID REFERENCES automations(id) ON DELETE SET NULL,
+  phone_number TEXT NOT NULL,
+  message_id TEXT UNIQUE,
   status message_status NOT NULL DEFAULT 'sent',
   error_message TEXT,
-  sent_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX IF NOT EXISTS idx_messages_lead_id ON messages (lead_id);
 CREATE INDEX IF NOT EXISTS idx_messages_campaign_id ON messages (campaign_id);
+CREATE INDEX IF NOT EXISTS idx_messages_automation_id ON messages (automation_id);
 CREATE INDEX IF NOT EXISTS idx_messages_status ON messages (status);
-CREATE INDEX IF NOT EXISTS idx_messages_sent_at ON messages (sent_at DESC);
+CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages (created_at DESC);
 
 -- =========================
 -- AUTOMATIONS
 -- =========================
 CREATE TABLE IF NOT EXISTS automations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
   trigger_type TEXT NOT NULL,
-  condition_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-  action_json JSONB NOT NULL DEFAULT '{}'::jsonb,
-  is_active BOOLEAN NOT NULL DEFAULT TRUE
+  conditions JSONB NOT NULL DEFAULT '{}'::jsonb,
+  action JSONB NOT NULL DEFAULT '{}'::jsonb,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX IF NOT EXISTS idx_automations_is_active ON automations (is_active);
+CREATE INDEX IF NOT EXISTS idx_automations_enabled ON automations (enabled);
 CREATE INDEX IF NOT EXISTS idx_automations_trigger_type ON automations (trigger_type);
+CREATE INDEX IF NOT EXISTS idx_automations_created_by ON automations (created_by);
+
+-- =========================
+-- TEMPLATES
+-- =========================
+CREATE TABLE IF NOT EXISTS templates (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL UNIQUE,
+  category TEXT NOT NULL,
+  language TEXT NOT NULL DEFAULT 'id',
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  created_by UUID REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_templates_name ON templates (name);
+CREATE INDEX IF NOT EXISTS idx_templates_status ON templates (status);
+CREATE INDEX IF NOT EXISTS idx_templates_created_by ON templates (created_by);
 
 -- =========================
 -- AUDIT LOGS

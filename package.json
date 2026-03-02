@@ -8,12 +8,15 @@
     "dev": "npx nodemon backend/server.js"
   },
   "dependencies": {
+    "axios": "^1.13.6",
     "bcrypt": "^5.1.0",
+    "bull": "^4.16.5",
     "bullmq": "^3.14.0",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",
     "express": "^4.18.2",
     "express-rate-limit": "^6.8.0",
+    "form-data": "^4.0.5",
     "helmet": "^6.0.1",
     "joi": "^17.8.3",
     "jsonwebtoken": "^9.0.0",
