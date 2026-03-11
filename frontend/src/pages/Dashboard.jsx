@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { campaignService, leadService } from '../services/api';
-import CampaignList from '../components/CampaignList';
-import CampaignForm from '../components/CampaignForm';
-import LeadList from '../components/LeadList';
+import CampaignList from '../components/CampaignList.jsx';
+import CampaignForm from '../components/CampaignForm.jsx';
+import LeadList from '../components/LeadList.jsx';
+import LeadForm from '../components/LeadForm.jsx';
+import LeadImportForm from '../components/LeadImportForm.jsx';
 import '../styles/Dashboard.css';
 
 function Dashboard() {
@@ -14,6 +16,8 @@ function Dashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [showCampaignForm, setShowCampaignForm] = useState(false);
+  const [showLeadForm, setShowLeadForm] = useState(false);
+  const [showImportForm, setShowImportForm] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -72,18 +76,37 @@ function Dashboard() {
     }
   };
 
+  const handleCreateLead = async (leadData) => {
+    try {
+      await leadService.create(leadData);
+      setShowLeadForm(false);
+      fetchLeads();
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   if (!user) {
-    return <div>Loading...</div>;
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
+        <div style={{ textAlign: 'center', color: 'var(--neutral-500)' }}>
+          <p>⏳ Loading...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
         <div className="header-content">
-          <h1>CRM Marketing Dashboard</h1>
+          <h1>🚀 CRM Marketing Dashboard</h1>
           <div className="user-info">
-            <span>{user.email} ({user.role})</span>
-            <button onClick={handleLogout} className="logout-btn">Logout</button>
+            <span>👤 {user.email}</span>
+            <span style={{ background: 'var(--primary-light)', padding: '0.25rem 0.75rem', borderRadius: 'var(--radius-md)', fontSize: '0.75rem', fontWeight: '600', color: 'var(--primary)' }}>
+              {user.role === 'ADMIN' ? '👨‍💼 Admin' : '📊 Marketing'}
+            </span>
+            <button onClick={handleLogout} className="logout-btn">🚪 Logout</button>
           </div>
         </div>
       </header>
@@ -94,29 +117,44 @@ function Dashboard() {
             className={`tab ${activeTab === 'campaigns' ? 'active' : ''}`}
             onClick={() => setActiveTab('campaigns')}
           >
-            Campaigns
+            📬 Campaigns
           </button>
           <button
             className={`tab ${activeTab === 'leads' ? 'active' : ''}`}
             onClick={() => setActiveTab('leads')}
           >
-            Leads
+            🎯 Leads
           </button>
         </nav>
 
-        {error && <div className="error-message">{error}</div>}
+        {error && (
+          <div className="error-message">
+            ⚠️ {error}
+            <button 
+              style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.25rem' }}
+              onClick={() => setError('')}
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         <div className="tab-content">
           {activeTab === 'campaigns' && (
             <div className="campaigns-section">
               <div className="section-header">
-                <h2>Campaigns</h2>
+                <div>
+                  <h2>📬 Campaigns</h2>
+                  <p style={{ color: 'var(--neutral-500)', margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
+                    Manage your marketing campaigns and track performance
+                  </p>
+                </div>
                 {user.role === 'ADMIN' && (
                   <button
                     onClick={() => setShowCampaignForm(!showCampaignForm)}
                     className="btn-primary"
                   >
-                    {showCampaignForm ? 'Cancel' : 'New Campaign'}
+                    {showCampaignForm ? '✕ Cancel' : '✨ New Campaign'}
                   </button>
                 )}
               </div>
@@ -129,7 +167,9 @@ function Dashboard() {
               )}
 
               {loading ? (
-                <div>Loading campaigns...</div>
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--neutral-500)' }}>
+                  ⏳ Loading campaigns...
+                </div>
               ) : (
                 <CampaignList campaigns={campaigns} />
               )}
@@ -139,11 +179,40 @@ function Dashboard() {
           {activeTab === 'leads' && (
             <div className="leads-section">
               <div className="section-header">
-                <h2>Leads</h2>
+                <div>
+                  <h2>🎯 Leads</h2>
+                  <p style={{ color: 'var(--neutral-500)', margin: '0.5rem 0 0 0', fontSize: '0.875rem' }}>
+                    View and manage all your leads in one place
+                  </p>
+                </div>
+                <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <button
+                    onClick={() => setShowImportForm(true)}
+                    className="btn-primary"
+                    style={{ background: 'var(--secondary)' }}
+                  >
+                    📊 Import CSV
+                  </button>
+                  <button
+                    onClick={() => setShowLeadForm(!showLeadForm)}
+                    className="btn-primary"
+                  >
+                    {showLeadForm ? '✕ Cancel' : '✨ New Lead'}
+                  </button>
+                </div>
               </div>
 
+              {showLeadForm && (
+                <LeadForm
+                  onSubmit={handleCreateLead}
+                  onCancel={() => setShowLeadForm(false)}
+                />
+              )}
+
               {loading ? (
-                <div>Loading leads...</div>
+                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--neutral-500)' }}>
+                  ⏳ Loading leads...
+                </div>
               ) : (
                 <LeadList leads={leads} />
               )}
@@ -151,6 +220,13 @@ function Dashboard() {
           )}
         </div>
       </div>
+
+      {showImportForm && (
+        <LeadImportForm
+          onClose={() => setShowImportForm(false)}
+          onSuccess={fetchLeads}
+        />
+      )}
     </div>
   );
 }

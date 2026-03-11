@@ -1,0 +1,255 @@
+/* Chart Styling */
+
+.stats-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+}
+
+.stat-card {
+  background: white;
+  border: 1px solid var(--neutral-200);
+  color: var(--neutral-900);
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  text-align: center;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--primary) 0%, var(--primary-dark) 100%);
+}
+
+.stat-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-4px);
+}
+
+.stat-card .stat-label {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--neutral-500);
+  margin-bottom: 0.5rem;
+  letter-spacing: 0.5px;
+}
+
+.stat-card .stat-value {
+  margin: 0;
+  font-size: 2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.stat-card .stat-percent {
+  margin: 0.5rem 0 0 0;
+  font-size: 0.875rem;
+  color: var(--success);
+  font-weight: 500;
+}
+
+.stat-card .stat-percent.negative {
+  color: var(--error);
+}
+
+.charts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 1.5rem;
+}
+
+.chart-container {
+  background: white;
+  border: 1px solid var(--neutral-200);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-md);
+}
+
+.chart-container h4 {
+  margin-top: 0;
+  margin-bottom: 1.5rem;
+  color: var(--neutral-900);
+  font-size: 1rem;
+  font-weight: 600;
+  border-bottom: 2px solid var(--neutral-200);
+  padding-bottom: 0.75rem;
+}
+
+.chart-container canvas {
+  max-height: 350px;
+}
+
+/* Timeline Styling */
+.history-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+}
+
+.history-timeline::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--neutral-200);
+}
+
+.history-item {
+  display: flex;
+  gap: 1.5rem;
+  padding: 1.5rem;
+  position: relative;
+  background: white;
+  margin-bottom: 0;
+}
+
+.history-item:first-child {
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.history-item:last-child {
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.history-item:not(:last-child) {
+  border-bottom: 1px solid var(--neutral-200);
+}
+
+.history-item:first-child .history-dot {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  box-shadow: 0 0 0 4px white, 0 0 0 6px var(--primary);
+}
+
+.history-dot {
+  width: 36px;
+  height: 36px;
+  background: var(--neutral-200);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: bold;
+  flex-shrink: 0;
+  position: relative;
+  left: 0;
+  font-size: 0.875rem;
+  box-shadow: 0 0 0 4px white;
+}
+
+.history-content {
+  flex-grow: 1;
+  padding-top: 0;
+}
+
+.history-change {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.history-change .badge {
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--primary-light);
+  color: var(--primary-dark);
+}
+
+.history-change .arrow {
+  color: var(--neutral-400);
+  font-weight: bold;
+  font-size: 0.875rem;
+}
+
+.history-meta {
+  display: flex;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: var(--neutral-500);
+  flex-wrap: wrap;
+}
+
+.history-meta p {
+  margin: 0;
+}
+
+.changed-by {
+  font-weight: 600;
+  color: var(--neutral-700);
+}
+
+.timestamp {
+  color: var(--neutral-500);
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .charts-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .stat-card {
+    padding: 1.25rem;
+  }
+
+  .stat-card .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .chart-container {
+    padding: 1rem;
+  }
+
+  .charts-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .history-timeline::before {
+    left: 14px;
+  }
+
+  .history-dot {
+    width: 28px;
+    height: 28px;
+    font-size: 0.75rem;
+  }
+
+  .history-item {
+    gap: 1rem;
+    padding: 1rem;
+  }
+}

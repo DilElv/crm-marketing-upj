@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { authService } from '../services/api';
+import { authService } from '../services/api.js';
 import '../styles/Auth.css';
 
 function Register() {
@@ -42,18 +42,26 @@ function Register() {
   return (
     <div className="auth-container">
       <div className="auth-box">
-        <h1>CRM Marketing UPJ</h1>
-        <h2>Register</h2>
+        <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
+          <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📝</div>
+          <h1>CRM Marketing</h1>
+          <p style={{ color: 'var(--neutral-500)', margin: '0.5rem 0 0 0' }}>
+            Bergabunglah dengan tim pemasaran kami
+          </p>
+        </div>
         
-        {error && <div className="error-message">{error}</div>}
+        <h2>Buat Akun Baru</h2>
+        
+        {error && <div className="error-message">⚠️ {error}</div>}
         
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="name">Name:</label>
+            <label htmlFor="name">👤 Nama Lengkap</label>
             <input
               type="text"
               id="name"
               name="name"
+              placeholder="John Doe"
               value={formData.name}
               onChange={handleChange}
               required
@@ -61,11 +69,12 @@ function Register() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="email">Email:</label>
+            <label htmlFor="email">📧 Email</label>
             <input
               type="email"
               id="email"
               name="email"
+              placeholder="nama@upj.ac.id"
               value={formData.email}
               onChange={handleChange}
               required
@@ -73,11 +82,12 @@ function Register() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="password">Password:</label>
+            <label htmlFor="password">🔐 Password</label>
             <input
               type="password"
               id="password"
               name="password"
+              placeholder="••••••••"
               value={formData.password}
               onChange={handleChange}
               required
@@ -85,25 +95,25 @@ function Register() {
           </div>
 
           <div className="form-group">
-            <label htmlFor="role">Role:</label>
+            <label htmlFor="role">👔 Role</label>
             <select
               id="role"
               name="role"
               value={formData.role}
               onChange={handleChange}
             >
-              <option value="MARKETING">Marketing</option>
-              <option value="ADMIN">Admin</option>
+              <option value="MARKETING">📊 Marketing</option>
+              <option value="ADMIN">👨‍💼 Admin</option>
             </select>
           </div>
 
           <button type="submit" disabled={loading}>
-            {loading ? 'Registering...' : 'Register'}
+            {loading ? '⏳ Sedang mendaftar...' : '✨ Daftar'}
           </button>
         </form>
 
         <p className="auth-link">
-          Already have an account? <a href="/login">Login here</a>
+          Sudah punya akun? <a href="/login">Masuk di sini</a>
         </p>
       </div>
     </div>

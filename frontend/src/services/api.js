@@ -1,5 +1,5 @@
 // API Configuration
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
 
 // Helper untuk API calls dengan authentication
 const apiCall = async (endpoint, options = {}) => {
@@ -18,13 +18,14 @@ const apiCall = async (endpoint, options = {}) => {
     headers,
   });
 
-  if (response.status === 401) {
+  const data = await response.json();
+
+  // For auth endpoints, don't redirect on 401 (it's expected for invalid credentials)
+  if (response.status === 401 && !endpoint.includes('/auth/')) {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.location.href = '/login';
   }
-
-  const data = await response.json();
 
   if (!response.ok) {
     throw new Error(data.message || 'API Error');
@@ -83,10 +84,13 @@ export const leadService = {
   getById: (id) =>
     apiCall(`/leads/${id}`, { method: 'GET' }),
 
-  create: (full_name, phone_number, email, city) =>
+  getHistory: (id) =>
+    apiCall(`/leads/${id}/history`, { method: 'GET' }),
+
+  create: (data) =>
     apiCall('/leads', {
       method: 'POST',
-      body: JSON.stringify({ full_name, phone_number, email, city }),
+      body: JSON.stringify(data),
     }),
 
   update: (id, data) =>

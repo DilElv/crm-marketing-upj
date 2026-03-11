@@ -13,6 +13,7 @@ const campaignsRouter = require('./routes/campaigns');
 const automationsRouter = require('./routes/automations');
 const templatesRouter = require('./routes/templates');
 const webhooksRouter = require('./routes/webhooks');
+const importRouter = require('./routes/import');
 
 const app = express();
 
@@ -29,6 +30,7 @@ app.use('/api/leads', leadsRouter);
 app.use('/api/campaigns', campaignsRouter);
 app.use('/api/automations', automationsRouter);
 app.use('/api/templates', templatesRouter);
+app.use('/api/import', importRouter);
 // Webhooks tidak perlu auth middleware (sudah di-verify via webhook token)
 app.use('/api/webhooks', webhooksRouter);
 
