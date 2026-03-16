@@ -3,17 +3,112 @@ const config = require('../config');
 const db = require('../config/database');
 const WhatsAppService = require('../services/whatsappService');
 
+const queueConnectionState = new Map();
+
+function buildRedisOptions(redisUrl) {
+  const fallback = {
+    host: '127.0.0.1',
+    port: 6379,
+  };
+
+  const baseOptions = {
+    connectTimeout: 5000,
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    retryStrategy: (times) => Math.min(times * 2000, 30000),
+  };
+
+  if (!redisUrl || typeof redisUrl !== 'string') {
+    return {
+      ...fallback,
+      ...baseOptions,
+    };
+  }
+
+  try {
+    const normalized = redisUrl.includes('://') ? redisUrl : `redis://${redisUrl}`;
+    const parsed = new URL(normalized);
+
+    const options = {
+      host: parsed.hostname || fallback.host,
+      port: parsed.port ? Number(parsed.port) : fallback.port,
+      ...baseOptions,
+    };
+
+    if (parsed.username) {
+      options.username = decodeURIComponent(parsed.username);
+    }
+
+    if (parsed.password) {
+      options.password = decodeURIComponent(parsed.password);
+    }
+
+    if (parsed.pathname && parsed.pathname !== '/') {
+      const dbIndex = Number(parsed.pathname.slice(1));
+      if (Number.isInteger(dbIndex) && dbIndex >= 0) {
+        options.db = dbIndex;
+      }
+    }
+
+    if (parsed.protocol === 'rediss:') {
+      options.tls = {};
+    }
+
+    return options;
+  } catch (err) {
+    console.warn(`[Queue] Invalid REDIS_URL "${redisUrl}". Falling back to 127.0.0.1:6379`);
+    return {
+      ...fallback,
+      ...baseOptions,
+    };
+  }
+}
+
+function markQueueConnectionIssue(queueLabel, err) {
+  const currentState = queueConnectionState.get(queueLabel) || {
+    isDown: false,
+    code: null,
+  };
+
+  const nextCode = err?.code || 'UNKNOWN';
+  if (currentState.isDown && currentState.code === nextCode) {
+    return;
+  }
+
+  queueConnectionState.set(queueLabel, {
+    isDown: true,
+    code: nextCode,
+  });
+
+  const host = err?.address || '127.0.0.1';
+  const port = err?.port || 6379;
+  console.error(`[Queue] ${queueLabel} Redis connection issue (${nextCode}) at ${host}:${port}. Retrying in background.`);
+}
+
+function markQueueReady(queueLabel) {
+  const currentState = queueConnectionState.get(queueLabel) || {
+    isDown: false,
+  };
+
+  if (currentState.isDown) {
+    console.log(`[Queue] ${queueLabel} Redis connection restored.`);
+  }
+
+  queueConnectionState.set(queueLabel, {
+    isDown: false,
+    code: null,
+  });
+}
+
+const redisOptions = buildRedisOptions(config.redis.url);
+
 // Initialize queues
 const messageQueue = new Queue('send-whatsapp-message', {
-  redis: {
-    url: config.redis.url || 'redis://localhost:6379',
-  },
+  redis: { ...redisOptions },
 });
 
 const blastQueue = new Queue('blast-campaign', {
-  redis: {
-    url: config.redis.url || 'redis://localhost:6379',
-  },
+  redis: { ...redisOptions },
 });
 
 /**
@@ -165,7 +260,11 @@ messageQueue.on('failed', (job, err) => {
 });
 
 messageQueue.on('error', (err) => {
-  console.error(`[Queue] Message queue error:`, err);
+  markQueueConnectionIssue('Message queue', err);
+});
+
+messageQueue.on('ready', () => {
+  markQueueReady('Message queue');
 });
 
 /**
@@ -184,7 +283,11 @@ blastQueue.on('failed', (job, err) => {
 });
 
 blastQueue.on('error', (err) => {
-  console.error(`[Queue] Blast queue error:`, err);
+  markQueueConnectionIssue('Blast queue', err);
+});
+
+blastQueue.on('ready', () => {
+  markQueueReady('Blast queue');
 });
 
 /**

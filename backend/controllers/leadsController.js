@@ -39,6 +39,18 @@ const updateLeadSchema = Joi.object({
   .min(1)
   .required();
 
+const listLeadsQuerySchema = Joi.object({
+  search: Joi.string().allow('', null),
+  city: Joi.string().allow('', null),
+  interest_program: Joi.string().allow('', null),
+  source: Joi.string().allow('', null),
+  status: Joi.string().valid(...leadStatusValues).allow('', null),
+  created_from: Joi.date().iso().optional(),
+  created_to: Joi.date().iso().optional(),
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(200).default(20),
+});
+
 function normalizeOptionalText(value) {
   if (value === '') return null;
   return value;
@@ -84,14 +96,86 @@ function mapUpdateLeadPayload(payload) {
 
 exports.getAllLeads = async (req, res, next) => {
   try {
-    const result = await db.query(
-      `SELECT id, full_name, phone_number, email, school_origin, city, program_interest,
-              entry_year, lead_source, status, assigned_to, notes, created_at
-       FROM leads
-       ORDER BY created_at DESC`
-    );
+    const { error, value } = listLeadsQuerySchema.validate(req.query, { stripUnknown: true });
+    if (error) return res.status(400).json({ message: error.details[0].message });
 
-    res.json({ data: result.rows, total: result.rowCount });
+    const whereClauses = [];
+    const values = [];
+
+    const pushClause = (clause, clauseValue) => {
+      values.push(clauseValue);
+      whereClauses.push(`${clause} $${values.length}`);
+    };
+
+    if (value.search) {
+      const term = `%${value.search.trim().toLowerCase()}%`;
+      values.push(term);
+      values.push(term);
+      values.push(term);
+      whereClauses.push(
+        `(lower(full_name) LIKE $${values.length - 2} OR lower(phone_number) LIKE $${values.length - 1} OR lower(COALESCE(email, '')) LIKE $${values.length})`
+      );
+    }
+
+    if (value.city) {
+      pushClause('lower(city) = lower(', value.city.trim());
+      whereClauses[whereClauses.length - 1] += ')';
+    }
+
+    if (value.interest_program) {
+      pushClause('lower(program_interest) = lower(', value.interest_program.trim());
+      whereClauses[whereClauses.length - 1] += ')';
+    }
+
+    if (value.source) {
+      pushClause('lower(lead_source) = lower(', value.source.trim());
+      whereClauses[whereClauses.length - 1] += ')';
+    }
+
+    if (value.status) {
+      pushClause('status =', value.status);
+    }
+
+    if (value.created_from) {
+      pushClause('created_at >=', value.created_from);
+    }
+
+    if (value.created_to) {
+      pushClause('created_at <=', value.created_to);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+
+    const page = value.page || 1;
+    const limit = value.limit || 20;
+    const offset = (page - 1) * limit;
+
+    values.push(limit);
+    values.push(offset);
+
+    const dataQuery = `
+      SELECT id, full_name, phone_number, email, school_origin, city, program_interest,
+             entry_year, lead_source, status, assigned_to, notes, created_at
+      FROM leads
+      ${whereSql}
+      ORDER BY created_at DESC
+      LIMIT $${values.length - 1}
+      OFFSET $${values.length}`;
+
+    const countValues = values.slice(0, values.length - 2);
+    const countQuery = `SELECT COUNT(*)::int AS total FROM leads ${whereSql}`;
+
+    const [dataResult, countResult] = await Promise.all([
+      db.query(dataQuery, values),
+      db.query(countQuery, countValues),
+    ]);
+
+    res.json({
+      data: dataResult.rows,
+      total: countResult.rows[0]?.total || 0,
+      page,
+      limit,
+    });
   } catch (err) {
     next(err);
   }

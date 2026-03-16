@@ -11,7 +11,7 @@ import {
   Tooltip,
   Legend,
 } from 'chart.js';
-import { Line, Bar, Pie } from 'react-chartjs-2';
+import { Bar, Pie } from 'react-chartjs-2';
 import '../styles/Charts.css';
 
 ChartJS.register(
@@ -41,7 +41,7 @@ function CampaignStats({ stats }) {
           stats.total_messages || 0,
           stats.delivered || 0,
           stats.read_count || 0,
-          (stats.total_messages || 0) - (stats.delivered || 0),
+          stats.failed || 0,
         ],
         backgroundColor: [
           'rgba(102, 126, 234, 0.8)',
@@ -117,7 +117,7 @@ function CampaignStats({ stats }) {
         <div className="stat-card">
           <p className="stat-label">Failed</p>
           <p className="stat-value">
-            {(stats.total_messages || 0) - (stats.delivered || 0)}
+            {stats.failed || 0}
           </p>
         </div>
       </div>

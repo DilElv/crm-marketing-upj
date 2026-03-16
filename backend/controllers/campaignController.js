@@ -1,14 +1,100 @@
 const Joi = require('joi');
 const db = require('../config/database');
-const { messageQueue } = require('../jobs/queue');
+const {
+  parseCsvBuffer,
+  importRowsToCampaign,
+  getCampaignImportTemplateCsv,
+} = require('../services/campaignLeadImportService');
 
 const createCampaignSchema = Joi.object({
-  name: Joi.string().min(3).max(200).required(),
-  templateName: Joi.string().required(),
+  name: Joi.string().min(3).max(200),
+  campaign_name: Joi.string().min(3).max(200),
+  templateName: Joi.string(),
+  message_template: Joi.string(),
   targetLeadStatus: Joi.string().valid('NEW', 'CONTACTED', 'INTERESTED', 'FOLLOW_UP', 'REGISTERED').allow(null),
+  leadIds: Joi.array().items(Joi.string().uuid()).default([]),
   parameters: Joi.array().items(Joi.string()).default([]),
   scheduleAt: Joi.date().optional(),
+  schedule_time: Joi.date().optional(),
+}).custom((value, helper) => {
+  const finalName = value.name || value.campaign_name;
+  const finalTemplate = value.templateName || value.message_template;
+
+  if (!finalName) {
+    return helper.error('any.invalid', { message: 'name or campaign_name is required' });
+  }
+
+  if (!finalTemplate) {
+    return helper.error('any.invalid', { message: 'templateName or message_template is required' });
+  }
+
+  return value;
 });
+
+const updateSelectionSchema = Joi.object({
+  leadIds: Joi.array().items(Joi.string().uuid()).required(),
+});
+
+const importMappingSchema = Joi.object({
+  name: Joi.string().allow(''),
+  phone_number: Joi.string().allow(''),
+  email: Joi.string().allow(''),
+  city: Joi.string().allow(''),
+  program_interest: Joi.string().allow(''),
+});
+
+function parseImportMapping(rawMapping) {
+  if (!rawMapping) return null;
+
+  if (typeof rawMapping === 'object' && rawMapping !== null) {
+    const { error, value } = importMappingSchema.validate(rawMapping);
+    if (error) {
+      const err = new Error(error.details[0].message);
+      err.status = 400;
+      throw err;
+    }
+    return value;
+  }
+
+  if (typeof rawMapping === 'string') {
+    let parsed = null;
+    try {
+      parsed = JSON.parse(rawMapping);
+    } catch (jsonError) {
+      const err = new Error('Invalid mapping payload. Expected JSON object.');
+      err.status = 400;
+      throw err;
+    }
+
+    const { error, value } = importMappingSchema.validate(parsed);
+    if (error) {
+      const err = new Error(error.details[0].message);
+      err.status = 400;
+      throw err;
+    }
+
+    return value;
+  }
+
+  const err = new Error('Invalid mapping payload format.');
+  err.status = 400;
+  throw err;
+}
+
+async function upsertCampaignLeads(campaignId, leadIds) {
+  if (!leadIds || leadIds.length === 0) return 0;
+
+  const result = await db.query(
+    `INSERT INTO campaign_leads (campaign_id, lead_id, selected)
+     SELECT $1, UNNEST($2::uuid[]), TRUE
+     ON CONFLICT (campaign_id, lead_id)
+     DO UPDATE SET selected = EXCLUDED.selected
+     RETURNING lead_id`,
+    [campaignId, leadIds]
+  );
+
+  return result.rowCount;
+}
 
 /**
  * GET /api/campaigns
@@ -19,11 +105,13 @@ exports.getAllCampaigns = async (req, res, next) => {
     const result = await db.query(
       `SELECT c.id, c.name, c.template_name, c.status, c.scheduled_at,
               COALESCE(u.name, 'Unknown') as created_by_name, c.created_at,
+              COUNT(DISTINCT cl.lead_id)::int as total_targets,
               COUNT(DISTINCT m.id) as total_messages,
               SUM(CASE WHEN m.status = 'delivered' THEN 1 ELSE 0 END) as delivered,
               SUM(CASE WHEN m.status = 'read' THEN 1 ELSE 0 END) as read_count
        FROM campaigns c
        LEFT JOIN users u ON c.created_by = u.id
+       LEFT JOIN campaign_leads cl ON cl.campaign_id = c.id AND cl.selected = TRUE
        LEFT JOIN messages m ON m.campaign_id = c.id
        GROUP BY c.id, u.name
        ORDER BY c.created_at DESC`
@@ -47,10 +135,14 @@ exports.getCampaignById = async (req, res, next) => {
     const { id } = req.params;
 
     const result = await db.query(
-      `SELECT c.*, COALESCE(u.name, 'Unknown') as created_by_name
+      `SELECT c.*, COALESCE(u.name, 'Unknown') as created_by_name,
+              COUNT(DISTINCT cl.lead_id)::int as total_targets,
+              SUM(CASE WHEN cl.selected = TRUE THEN 1 ELSE 0 END)::int as selected_targets
        FROM campaigns c
        LEFT JOIN users u ON c.created_by = u.id
-       WHERE c.id = $1`,
+       LEFT JOIN campaign_leads cl ON cl.campaign_id = c.id
+       WHERE c.id = $1
+       GROUP BY c.id, u.name`,
       [id]
     );
 
@@ -73,7 +165,10 @@ exports.createCampaign = async (req, res, next) => {
     const { error, value } = createCampaignSchema.validate(req.body);
     if (error) return res.status(400).json({ message: error.details[0].message });
 
-    const { name, templateName, targetLeadStatus, parameters, scheduleAt } = value;
+    const name = value.name || value.campaign_name;
+    const templateName = value.templateName || value.message_template;
+    const scheduleAt = value.scheduleAt || value.schedule_time;
+    const { targetLeadStatus, leadIds } = value;
 
     // Create campaign record
     const campaignResult = await db.query(
@@ -91,62 +186,25 @@ exports.createCampaign = async (req, res, next) => {
 
     const campaign = campaignResult.rows[0];
 
-    // Get target leads if status specified
-    let leadCount = 0;
-    if (targetLeadStatus) {
+    let selectedCount = 0;
+
+    if (Array.isArray(leadIds) && leadIds.length > 0) {
+      selectedCount += await upsertCampaignLeads(campaign.id, leadIds);
+    } else if (targetLeadStatus) {
       const leadsResult = await db.query(
-        `SELECT id, phone_number FROM leads WHERE status = $1`,
+        `SELECT id FROM leads WHERE status = $1`,
         [targetLeadStatus]
       );
 
-      const leads = leadsResult.rows;
-      leadCount = leads.length;
-
-      if (scheduleAt) {
-        // Schedule untuk nanti
-        const delayMs = new Date(scheduleAt).getTime() - Date.now();
-        if (delayMs > 0) {
-          await messageQueue.add(
-            'blast-campaign',
-            {
-              campaignId: campaign.id,
-              templateName,
-              parameters,
-              targetLeadStatus,
-            },
-            {
-              delay: delayMs,
-              attempts: 1,
-            }
-          );
-          console.log(`[Campaign] Scheduled campaign ${campaign.id} untuk ${new Date(scheduleAt).toISOString()}`);
-        }
-      } else {
-        // Send immediately
-        for (const lead of leads) {
-          await messageQueue.add(
-            'send-whatsapp-message',
-            {
-              campaignId: campaign.id,
-              phoneNumber: lead.phone_number,
-              leadId: lead.id,
-              templateName,
-              parameters,
-            },
-            {
-              delay: Math.random() * 5000,
-            }
-          );
-        }
-
-        console.log(`[Campaign] Queued ${leadCount} messages untuk campaign ${campaign.id}`);
-      }
+      const autoLeadIds = leadsResult.rows.map((lead) => lead.id);
+      selectedCount += await upsertCampaignLeads(campaign.id, autoLeadIds);
     }
 
     res.status(201).json({
       data: campaign,
       message: 'Campaign created',
-      queued: `${leadCount} leads scheduled`,
+      selectedLeads: selectedCount,
+      nextStep: 'Use /api/blast/:campaignId/preview and /start to run blast',
     });
   } catch (err) {
     next(err);
@@ -199,7 +257,7 @@ exports.getCampaignStats = async (req, res, next) => {
         c.status,
         c.created_at,
         c.scheduled_at,
-        COUNT(m.id)::int as total_sent,
+        COUNT(m.id)::int as total_messages,
         SUM(CASE WHEN m.status = 'delivered' THEN 1 ELSE 0 END)::int as delivered,
         SUM(CASE WHEN m.status = 'read' THEN 1 ELSE 0 END)::int as read_count,
         SUM(CASE WHEN m.status = 'failed' THEN 1 ELSE 0 END)::int as failed,
@@ -218,10 +276,130 @@ exports.getCampaignStats = async (req, res, next) => {
       return res.status(404).json({ message: 'Campaign not found' });
     }
 
-    res.json({ data: statsResult.rows[0] });
+    const data = statsResult.rows[0];
+    res.json({
+      data: {
+        ...data,
+        total_sent: data.total_messages,
+      },
+    });
   } catch (err) {
     next(err);
   }
+};
+
+exports.previewCampaignContacts = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const campaignResult = await db.query(
+      `SELECT id, name, template_name, status
+       FROM campaigns
+       WHERE id = $1`,
+      [id]
+    );
+
+    if (campaignResult.rowCount === 0) {
+      return res.status(404).json({ message: 'Campaign not found' });
+    }
+
+    const [targetsResult, countResult] = await Promise.all([
+      db.query(
+      `SELECT l.id, l.full_name, l.phone_number, l.email, l.city, l.status
+       FROM campaign_leads cl
+       INNER JOIN leads l ON l.id = cl.lead_id
+       WHERE cl.campaign_id = $1
+         AND cl.selected = TRUE
+       ORDER BY l.created_at DESC
+       LIMIT 100`,
+      [id]
+      ),
+      db.query(
+        `SELECT COUNT(*)::int AS total_targets
+         FROM campaign_leads
+         WHERE campaign_id = $1
+           AND selected = TRUE`,
+        [id]
+      ),
+    ]);
+
+    res.json({
+      data: {
+        campaign: campaignResult.rows[0],
+        total_targets: countResult.rows[0]?.total_targets || 0,
+        contacts: targetsResult.rows,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.updateCampaignLeadSelection = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { error, value } = updateSelectionSchema.validate(req.body);
+    if (error) return res.status(400).json({ message: error.details[0].message });
+
+    const campaignResult = await db.query(
+      `SELECT id FROM campaigns WHERE id = $1`,
+      [id]
+    );
+
+    if (campaignResult.rowCount === 0) {
+      return res.status(404).json({ message: 'Campaign not found' });
+    }
+
+    await db.query('DELETE FROM campaign_leads WHERE campaign_id = $1', [id]);
+    const selectedCount = await upsertCampaignLeads(id, value.leadIds);
+
+    res.json({
+      message: 'Campaign leads updated',
+      data: {
+        campaign_id: id,
+        selected_leads: selectedCount,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.importCampaignLeadsFromCsv = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'CSV file is required (field name: file)' });
+    }
+
+    const fileName = String(req.file.originalname || '').toLowerCase();
+    if (!fileName.endsWith('.csv')) {
+      return res.status(400).json({ message: 'Only CSV files are allowed' });
+    }
+
+    const mapping = parseImportMapping(req.body?.mapping);
+
+    const parsed = await parseCsvBuffer(req.file.buffer, mapping);
+    const importResult = await importRowsToCampaign({
+      campaignId: id,
+      rows: parsed.rows,
+    });
+
+    res.json({
+      imported: importResult.imported,
+      skipped: importResult.skipped + parsed.invalidRows.length,
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+exports.downloadCampaignLeadImportTemplate = (req, res) => {
+  const csvTemplate = getCampaignImportTemplateCsv();
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename=campaign_leads_import_template.csv');
+  res.status(200).send(csvTemplate);
 };
 
 /**

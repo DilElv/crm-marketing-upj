@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Navigate } from 'react-router-dom';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -12,40 +12,46 @@ function PrivateRoute({ children }) {
   return token ? children : <Navigate to="/login" />;
 }
 
+const router = createBrowserRouter(
+  [
+    { path: '/login', element: <Login /> },
+    { path: '/register', element: <Register /> },
+    {
+      path: '/dashboard',
+      element: (
+        <PrivateRoute>
+          <Dashboard />
+        </PrivateRoute>
+      ),
+    },
+    {
+      path: '/campaign/:id',
+      element: (
+        <PrivateRoute>
+          <CampaignDetail />
+        </PrivateRoute>
+      ),
+    },
+    {
+      path: '/lead/:id',
+      element: (
+        <PrivateRoute>
+          <LeadDetail />
+        </PrivateRoute>
+      ),
+    },
+    { path: '/', element: <Navigate to="/dashboard" /> },
+  ],
+  {
+    future: {
+      v7_startTransition: true,
+      v7_relativeSplatPath: true,
+    },
+  }
+);
+
 function App() {
-  return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/register" element={<Register />} />
-        <Route
-          path="/dashboard"
-          element={
-            <PrivateRoute>
-              <Dashboard />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/campaign/:id"
-          element={
-            <PrivateRoute>
-              <CampaignDetail />
-            </PrivateRoute>
-          }
-        />
-        <Route
-          path="/lead/:id"
-          element={
-            <PrivateRoute>
-              <LeadDetail />
-            </PrivateRoute>
-          }
-        />
-        <Route path="/" element={<Navigate to="/dashboard" />} />
-      </Routes>
-    </BrowserRouter>
-  );
+  return <RouterProvider router={router} future={{ v7_startTransition: true }} />;
 }
 
 export default App;

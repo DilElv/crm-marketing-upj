@@ -1,20 +1,35 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { campaignService, leadService } from '../services/api';
+import { campaignService, leadService, dashboardService } from '../services/api';
 import CampaignList from '../components/CampaignList.jsx';
 import CampaignForm from '../components/CampaignForm.jsx';
 import LeadList from '../components/LeadList.jsx';
 import LeadForm from '../components/LeadForm.jsx';
 import LeadImportForm from '../components/LeadImportForm.jsx';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  ArcElement,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+import { Bar, Pie } from 'react-chartjs-2';
 import '../styles/Dashboard.css';
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, ArcElement, Tooltip, Legend);
 
 function Dashboard() {
   const [user, setUser] = useState(null);
   const [activeTab, setActiveTab] = useState('campaigns');
   const [campaigns, setCampaigns] = useState([]);
   const [leads, setLeads] = useState([]);
+  const [leadSearch, setLeadSearch] = useState('');
+  const [leadStatus, setLeadStatus] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [overview, setOverview] = useState(null);
   const [showCampaignForm, setShowCampaignForm] = useState(false);
   const [showLeadForm, setShowLeadForm] = useState(false);
   const [showImportForm, setShowImportForm] = useState(false);
@@ -29,7 +44,18 @@ function Dashboard() {
     setUser(JSON.parse(storedUser));
     fetchCampaigns();
     fetchLeads();
+    fetchOverview();
   }, [navigate]);
+
+  const fetchOverview = async () => {
+    try {
+      const response = await dashboardService.getOverview();
+      setOverview(response.data || null);
+    } catch (err) {
+      // Keep dashboard functional even if analytics endpoint is not available.
+      console.error('Overview error:', err.message);
+    }
+  };
 
   const fetchCampaigns = async () => {
     setLoading(true);
@@ -43,10 +69,10 @@ function Dashboard() {
     }
   };
 
-  const fetchLeads = async () => {
+  const fetchLeads = async (filters = {}) => {
     setLoading(true);
     try {
-      const response = await leadService.getAll(1, 20);
+      const response = await leadService.getAll(1, 20, filters);
       setLeads(response.data || []);
     } catch (err) {
       setError(err.message);
@@ -86,6 +112,13 @@ function Dashboard() {
     }
   };
 
+  const handleApplyLeadFilters = () => {
+    fetchLeads({
+      search: leadSearch,
+      status: leadStatus,
+    });
+  };
+
   if (!user) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -95,6 +128,39 @@ function Dashboard() {
       </div>
     );
   }
+
+  const totals = overview?.totals || {};
+  const performanceRows = overview?.charts?.campaign_performance || [];
+
+  const successFailedData = {
+    labels: ['Success', 'Failed'],
+    datasets: [
+      {
+        data: [
+          overview?.charts?.success_vs_failed?.success || 0,
+          overview?.charts?.success_vs_failed?.failed || 0,
+        ],
+        backgroundColor: ['rgba(46, 204, 113, 0.8)', 'rgba(231, 76, 60, 0.8)'],
+        borderWidth: 1,
+      },
+    ],
+  };
+
+  const campaignPerformanceData = {
+    labels: performanceRows.map((row) => row.name || 'Unnamed').slice(0, 6),
+    datasets: [
+      {
+        label: 'Success',
+        data: performanceRows.map((row) => row.success_messages || 0).slice(0, 6),
+        backgroundColor: 'rgba(52, 152, 219, 0.7)',
+      },
+      {
+        label: 'Failed',
+        data: performanceRows.map((row) => row.failed_messages || 0).slice(0, 6),
+        backgroundColor: 'rgba(230, 126, 34, 0.7)',
+      },
+    ],
+  };
 
   return (
     <div className="dashboard-container">
@@ -112,6 +178,28 @@ function Dashboard() {
       </header>
 
       <div className="dashboard-content">
+        <section style={{ marginBottom: '1.25rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+            <div className="stat-card"><p className="stat-label">Total Campaigns</p><p className="stat-value">{totals.total_campaigns || 0}</p></div>
+            <div className="stat-card"><p className="stat-label">Messages Sent</p><p className="stat-value">{totals.messages_sent || 0}</p></div>
+            <div className="stat-card"><p className="stat-label">Successful</p><p className="stat-value">{totals.successful_messages || 0}</p></div>
+            <div className="stat-card"><p className="stat-label">Failed</p><p className="stat-value">{totals.failed_messages || 0}</p></div>
+            <div className="stat-card"><p className="stat-label">Read (Blue Tick)</p><p className="stat-value">{totals.read_messages || 0}</p></div>
+            <div className="stat-card"><p className="stat-label">Created Today</p><p className="stat-value">{totals.campaigns_created_today || 0}</p></div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '0.75rem', marginTop: '0.75rem' }}>
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '0.75rem 1rem' }}>
+              <h4 style={{ marginBottom: '0.75rem' }}>Success vs Failed</h4>
+              <Pie data={successFailedData} />
+            </div>
+            <div style={{ background: '#fff', borderRadius: '12px', padding: '0.75rem 1rem' }}>
+              <h4 style={{ marginBottom: '0.75rem' }}>Campaign Performance</h4>
+              <Bar data={campaignPerformanceData} options={{ responsive: true, plugins: { legend: { position: 'bottom' } } }} />
+            </div>
+          </div>
+        </section>
+
         <nav className="tabs">
           <button
             className={`tab ${activeTab === 'campaigns' ? 'active' : ''}`}
@@ -186,6 +274,33 @@ function Dashboard() {
                   </p>
                 </div>
                 <div style={{ display: 'flex', gap: '0.75rem' }}>
+                  <input
+                    type="text"
+                    placeholder="Search name / phone / email"
+                    value={leadSearch}
+                    onChange={(e) => setLeadSearch(e.target.value)}
+                    style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
+                  />
+                  <select
+                    value={leadStatus}
+                    onChange={(e) => setLeadStatus(e.target.value)}
+                    style={{ padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid #ddd' }}
+                  >
+                    <option value="">All Status</option>
+                    <option value="NEW">NEW</option>
+                    <option value="CONTACTED">CONTACTED</option>
+                    <option value="INTERESTED">INTERESTED</option>
+                    <option value="FOLLOW_UP">FOLLOW_UP</option>
+                    <option value="REGISTERED">REGISTERED</option>
+                    <option value="REJECTED">REJECTED</option>
+                  </select>
+                  <button
+                    onClick={handleApplyLeadFilters}
+                    className="btn-primary"
+                    style={{ background: '#374151' }}
+                  >
+                    Filter
+                  </button>
                   <button
                     onClick={() => setShowImportForm(true)}
                     className="btn-primary"

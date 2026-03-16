@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { leadService } from '../services/api.js';
 import { Toaster, toast } from 'react-hot-toast';
@@ -17,11 +17,7 @@ function LeadDetail() {
   const [editData, setEditData] = useState(null);
   const [showStatusUpdate, setShowStatusUpdate] = useState(false);
 
-  useEffect(() => {
-    fetchLeadDetail();
-  }, [id]);
-
-  const fetchLeadDetail = async () => {
+  const fetchLeadDetail = useCallback(async () => {
     setLoading(true);
     try {
       const [leadResponse, historyResponse] = await Promise.all([
@@ -38,7 +34,11 @@ function LeadDetail() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [id]);
+
+  useEffect(() => {
+    fetchLeadDetail();
+  }, [fetchLeadDetail]);
 
   const handleDelete = async () => {
     if (window.confirm('Are you sure you want to delete this lead?')) {

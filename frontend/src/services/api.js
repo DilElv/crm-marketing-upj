@@ -1,13 +1,15 @@
 // API Configuration
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+export const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
 // Helper untuk API calls dengan authentication
 const apiCall = async (endpoint, options = {}) => {
   const token = localStorage.getItem('token');
-  const headers = {
-    'Content-Type': 'application/json',
-    ...options.headers,
-  };
+  const headers = { ...options.headers };
+
+  const isFormData = options.body instanceof FormData;
+  if (!isFormData) {
+    headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+  }
 
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -57,11 +59,16 @@ export const campaignService = {
   getById: (id) =>
     apiCall(`/campaigns/${id}`, { method: 'GET' }),
 
-  create: (name, templateName, targetLeadStatus, parameters = []) =>
-    apiCall('/campaigns', {
+  create: (nameOrPayload, templateName, targetLeadStatus, parameters = []) => {
+    const payload = typeof nameOrPayload === 'object' && nameOrPayload !== null
+      ? nameOrPayload
+      : { name: nameOrPayload, templateName, targetLeadStatus, parameters };
+
+    return apiCall('/campaigns', {
       method: 'POST',
-      body: JSON.stringify({ name, templateName, targetLeadStatus, parameters }),
-    }),
+      body: JSON.stringify(payload),
+    });
+  },
 
   update: (id, data) =>
     apiCall(`/campaigns/${id}`, {
@@ -74,12 +81,67 @@ export const campaignService = {
 
   getStats: (id) =>
     apiCall(`/campaigns/${id}/stats`, { method: 'GET' }),
+
+  previewContacts: (id) =>
+    apiCall(`/campaigns/${id}/preview-contacts`, { method: 'GET' }),
+
+  updateLeadSelection: (id, leadIds) =>
+    apiCall(`/campaigns/${id}/leads`, {
+      method: 'PUT',
+      body: JSON.stringify({ leadIds }),
+    }),
+
+  importLeads: (id, file, mapping = null) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (mapping) {
+      formData.append('mapping', JSON.stringify(mapping));
+    }
+
+    return apiCall(`/campaigns/${id}/import-leads`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  downloadImportTemplate: async () => {
+    const token = localStorage.getItem('token');
+    const response = await fetch(`${API_BASE_URL}/campaigns/import-template`, {
+      method: 'GET',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+
+    if (!response.ok) {
+      let message = 'Failed to download campaign import template';
+      try {
+        const data = await response.json();
+        message = data.message || message;
+      } catch (err) {
+        // Ignore non-JSON response parsing errors.
+      }
+      throw new Error(message);
+    }
+
+    return response.blob();
+  },
 };
 
 // Lead Services
 export const leadService = {
-  getAll: (page = 1, limit = 10) =>
-    apiCall(`/leads?page=${page}&limit=${limit}`, { method: 'GET' }),
+  getAll: (page = 1, limit = 10, filters = {}) => {
+    const searchParams = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+
+    Object.entries(filters || {}).forEach(([key, value]) => {
+      if (value !== undefined && value !== null && String(value).trim() !== '') {
+        searchParams.append(key, String(value));
+      }
+    });
+
+    return apiCall(`/leads?${searchParams.toString()}`, { method: 'GET' });
+  },
 
   getById: (id) =>
     apiCall(`/leads/${id}`, { method: 'GET' }),
@@ -143,4 +205,75 @@ export const automationService = {
 
   delete: (id) =>
     apiCall(`/automations/${id}`, { method: 'DELETE' }),
+};
+
+export const dashboardService = {
+  getOverview: () =>
+    apiCall('/dashboard/overview', { method: 'GET' }),
+};
+
+export const blastService = {
+  previewTargets: (campaignId) =>
+    apiCall(`/blast/${campaignId}/preview`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  start: (campaignId, payload = {}) =>
+    apiCall(`/blast/${campaignId}/start`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  retryFailed: (campaignId, payload = {}) =>
+    apiCall(`/blast/${campaignId}/retry-failed`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  getStatus: (campaignId) =>
+    apiCall(`/blast/${campaignId}/status`, { method: 'GET' }),
+};
+
+export const reportService = {
+  getCampaignResult: (campaignId) =>
+    apiCall(`/reports/campaigns/${campaignId}/result`, { method: 'GET' }),
+
+  getCsvExportUrl: (campaignId) =>
+    `${API_BASE_URL}/reports/campaigns/${campaignId}/export/csv`,
+
+  getPdfExportUrl: (campaignId) =>
+    `${API_BASE_URL}/reports/campaigns/${campaignId}/export/pdf`,
+};
+
+export const importService = {
+  downloadTemplate: async () => {
+    const response = await fetch(`${API_BASE_URL}/import/template`);
+    if (!response.ok) throw new Error('Failed to download template');
+    return response.blob();
+  },
+
+  previewCsv: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiCall('/import/csv/preview', {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  commitPreview: (previewId) =>
+    apiCall('/import/csv/commit', {
+      method: 'POST',
+      body: JSON.stringify({ previewId }),
+    }),
+
+  importDirect: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiCall('/import/csv', {
+      method: 'POST',
+      body: formData,
+    });
+  },
 };

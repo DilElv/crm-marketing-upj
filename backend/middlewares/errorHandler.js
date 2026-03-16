@@ -1,6 +1,14 @@
+const { normalizeDatabaseError } = require('../config/database');
+
 // global error handler
 module.exports = function errorHandler(err, req, res, next) {
-  console.error(err.stack || err);
-  const status = err.status || 500;
-  res.status(status).json({ message: err.message || 'Internal Server Error' });
+  const normalizedError = normalizeDatabaseError(err);
+  const status = normalizedError.status || 500;
+
+  console.error(normalizedError.stack || normalizedError);
+
+  res.status(status).json({
+    message: normalizedError.message || 'Internal Server Error',
+    code: normalizedError.code || 'INTERNAL_SERVER_ERROR',
+  });
 };

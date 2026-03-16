@@ -40,16 +40,7 @@ exports.syncTemplatesFromMeta = async (req, res, next) => {
   try {
     console.log('[Template] Syncing templates from Meta...');
 
-    const result = await WhatsAppService.getTemplates();
-
-    if (!result.success) {
-      return res.status(400).json({
-        message: 'Failed to fetch templates from Meta',
-        error: result.error,
-      });
-    }
-
-    const templates = result.templates || [];
+    const templates = await WhatsAppService.getTemplates();
     console.log(`[Template] Received ${templates.length} templates from Meta`);
 
     // Save to local cache (optional - untuk mengurangi API calls)
@@ -107,13 +98,6 @@ exports.createTemplate = async (req, res, next) => {
       components,
       language
     );
-
-    if (!result.success) {
-      return res.status(400).json({
-        message: 'Failed to create template on Meta',
-        error: result.error,
-      });
-    }
 
     // Optionally save to local DB for reference
     try {

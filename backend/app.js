@@ -14,6 +14,9 @@ const automationsRouter = require('./routes/automations');
 const templatesRouter = require('./routes/templates');
 const webhooksRouter = require('./routes/webhooks');
 const importRouter = require('./routes/import');
+const dashboardRouter = require('./routes/dashboard');
+const blastRouter = require('./routes/blast');
+const reportsRouter = require('./routes/reports');
 
 const app = express();
 
@@ -31,6 +34,9 @@ app.use('/api/campaigns', campaignsRouter);
 app.use('/api/automations', automationsRouter);
 app.use('/api/templates', templatesRouter);
 app.use('/api/import', importRouter);
+app.use('/api/dashboard', dashboardRouter);
+app.use('/api/blast', blastRouter);
+app.use('/api/reports', reportsRouter);
 // Webhooks tidak perlu auth middleware (sudah di-verify via webhook token)
 app.use('/api/webhooks', webhooksRouter);
 

@@ -1,12 +1,16 @@
 import React, { useState } from 'react';
 import { IoDownload, IoCloudUpload, IoClose } from 'react-icons/io5';
 import toast from 'react-hot-toast';
+import { importService } from '../services/api';
 import '../styles/Components.css';
 
 export default function LeadImportForm({ onClose, onSuccess }) {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [stats, setStats] = useState(null);
+  const [previewId, setPreviewId] = useState('');
+  const [previewRows, setPreviewRows] = useState([]);
+  const [invalidRows, setInvalidRows] = useState([]);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -21,8 +25,7 @@ export default function LeadImportForm({ onClose, onSuccess }) {
 
   const downloadTemplate = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/import/template');
-      const blob = await response.blob();
+      const blob = await importService.downloadTemplate();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -37,7 +40,7 @@ export default function LeadImportForm({ onClose, onSuccess }) {
     }
   };
 
-  const handleSubmit = async (e) => {
+  const handlePreview = async (e) => {
     e.preventDefault();
 
     if (!file) {
@@ -46,30 +49,49 @@ export default function LeadImportForm({ onClose, onSuccess }) {
     }
 
     setLoading(true);
-    const toastId = toast.loading('⏳ Importing leads from CSV...');
+    const toastId = toast.loading('⏳ Validating CSV...');
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/import/csv', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formData,
+      const data = await importService.previewCsv(file);
+      const previewData = data?.data || {};
+      setPreviewId(previewData.previewId || '');
+      setPreviewRows(previewData.preview || []);
+      setInvalidRows(previewData.invalidRows || []);
+      setStats({
+        validLines: previewData.summary?.validLines || 0,
+        errorLines: previewData.summary?.invalidLines || 0,
+        totalLines: previewData.summary?.totalLines || 0,
       });
 
-      const data = await response.json();
+      toast.success('✅ CSV preview generated. Please confirm import.', { id: toastId });
+    } catch (err) {
+      toast.error(`❌ ${err.message}`, { id: toastId });
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      if (!response.ok) {
-        throw new Error(data.message || 'Import failed');
-      }
+  const handleCommit = async () => {
+    if (!previewId) {
+      toast.error('Preview not found. Please preview CSV again.');
+      return;
+    }
 
-      setStats(data.stats);
+    setLoading(true);
+    const toastId = toast.loading('⏳ Saving valid leads...');
+
+    try {
+      const response = await importService.commitPreview(previewId);
+      const importStats = response?.stats || {};
+
+      setStats((prev) => ({
+        ...(prev || {}),
+        importedLeads: importStats.importedLeads || 0,
+        duplicateSkipped: importStats.duplicateSkipped || 0,
+      }));
+
       toast.success(
-        `✅ Import complete! ${data.stats.importedLeads} leads added, ${data.stats.duplicateSkipped} duplicates skipped`,
+        `✅ Import complete! ${importStats.importedLeads || 0} leads added, ${importStats.duplicateSkipped || 0} duplicates skipped`,
         { id: toastId }
       );
 
@@ -77,10 +99,9 @@ export default function LeadImportForm({ onClose, onSuccess }) {
         onSuccess();
       }
 
-      // Close form after 2 seconds
       setTimeout(() => {
         onClose();
-      }, 2000);
+      }, 1800);
     } catch (err) {
       toast.error(`❌ ${err.message}`, { id: toastId });
     } finally {
@@ -108,11 +129,11 @@ export default function LeadImportForm({ onClose, onSuccess }) {
           <div className="import-stats">
             <div className="stat-item">
               <div className="stat-label">✅ Imported</div>
-              <div className="stat-value success">{stats.importedLeads}</div>
+              <div className="stat-value success">{stats.importedLeads || 0}</div>
             </div>
             <div className="stat-item">
               <div className="stat-label">⚠️ Duplicates Skipped</div>
-              <div className="stat-value warning">{stats.duplicateSkipped}</div>
+              <div className="stat-value warning">{stats.duplicateSkipped || 0}</div>
             </div>
             <div className="stat-item">
               <div className="stat-label">❌ Errors</div>
@@ -127,7 +148,7 @@ export default function LeadImportForm({ onClose, onSuccess }) {
 
         {/* Form */}
         {!stats && (
-          <form onSubmit={handleSubmit} className="import-form">
+          <form onSubmit={handlePreview} className="import-form">
             {/* Instructions */}
             <div className="instruction-box">
               <h3>📋 CSV Format Required:</h3>
@@ -183,6 +204,50 @@ export default function LeadImportForm({ onClose, onSuccess }) {
               </button>
             </div>
           </form>
+        )}
+
+        {stats && stats.importedLeads === undefined && (
+          <div className="import-form" style={{ gap: '0.75rem' }}>
+            <div className="instruction-box">
+              <h3>Preview Results</h3>
+              <p>Valid rows: <strong>{stats.validLines || 0}</strong></p>
+              <p>Invalid rows: <strong>{stats.errorLines || 0}</strong></p>
+              <p>Preview records shown: <strong>{previewRows.length}</strong></p>
+            </div>
+
+            {invalidRows.length > 0 && (
+              <div className="instruction-box" style={{ maxHeight: 180, overflow: 'auto' }}>
+                <h3>Invalid Rows (Top 20)</h3>
+                {invalidRows.slice(0, 20).map((item, idx) => (
+                  <p key={`${item.line}-${idx}`}>Line {item.line}: {item.reason}</p>
+                ))}
+              </div>
+            )}
+
+            <div className="import-form-buttons">
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => {
+                  setStats(null);
+                  setPreviewId('');
+                  setPreviewRows([]);
+                  setInvalidRows([]);
+                }}
+                disabled={loading}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleCommit}
+                disabled={loading || !previewId || (stats.validLines || 0) === 0}
+              >
+                {loading ? 'Saving...' : 'Confirm Import'}
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Success Message */}
