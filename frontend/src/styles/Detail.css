@@ -117,9 +117,10 @@
 
 .info-item {
   padding: 1rem;
-  background: var(--neutral-50);
+  background: transparent;
   border-radius: var(--radius-md);
-  border-left: 4px solid var(--primary);
+  border-left: none;
+  border-bottom: 1px solid var(--neutral-200);
 }
 
 .info-item label {
@@ -137,6 +138,10 @@
   color: var(--neutral-900);
   font-size: 1rem;
   font-weight: 500;
+  background: transparent;
+  border: none;
+  cursor: default;
+  user-select: text;
 }
 
 /* Edit Form */

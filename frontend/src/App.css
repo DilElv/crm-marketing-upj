@@ -68,8 +68,25 @@ button {
   transition: all 0.2s ease;
 }
 
+button:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
 input, select, textarea {
   font-family: inherit;
+}
+
+/* Remove default outline for better UX */
+*:focus {
+  outline: none;
+}
+
+/* Enhanced focus handling for interactive elements */
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
 }
 
 /* Scrollbar */

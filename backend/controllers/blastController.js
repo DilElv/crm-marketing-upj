@@ -148,30 +148,45 @@ exports.previewTargets = async (req, res, next) => {
 };
 
 exports.startBlast = async (req, res, next) => {
+  const client = await db.getClient();
+
   try {
+    // FIX #3: Wrap in transaction for safety
+    await client.query('BEGIN');
+
     const idValidation = campaignIdSchema.validate(req.params);
-    if (idValidation.error) return res.status(400).json({ message: idValidation.error.details[0].message });
+    if (idValidation.error) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: idValidation.error.details[0].message });
+    }
 
     const bodyValidation = startBlastSchema.validate(req.body);
-    if (bodyValidation.error) return res.status(400).json({ message: bodyValidation.error.details[0].message });
+    if (bodyValidation.error) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ message: bodyValidation.error.details[0].message });
+    }
 
     const campaignId = idValidation.value.campaignId;
     const { parameters, ratePerSecond, retryAttempts } = bodyValidation.value;
 
     const campaign = await getCampaignById(campaignId);
     if (!campaign) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ message: 'Campaign not found' });
     }
 
     if (campaign.status === 'COMPLETED' || campaign.status === 'CANCELLED') {
+      await client.query('ROLLBACK');
       return res.status(400).json({ message: `Campaign cannot be started from status ${campaign.status}` });
     }
 
     const targets = await getCampaignTargets(campaignId);
     if (targets.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ message: 'No selected leads for this campaign. Select leads first.' });
     }
 
+    // Queue targets (this might fail if Redis is down)
     const queued = await queueTargets({
       campaignId,
       templateName: campaign.template_name,
@@ -181,12 +196,16 @@ exports.startBlast = async (req, res, next) => {
       targets,
     });
 
+    // Update campaign status only if queueing succeeded
     await db.query(
       `UPDATE campaigns
        SET status = 'RUNNING'
        WHERE id = $1`,
       [campaignId]
     );
+
+    // Commit transaction
+    await client.query('COMMIT');
 
     res.json({
       message: 'Blast started',
@@ -198,7 +217,15 @@ exports.startBlast = async (req, res, next) => {
       },
     });
   } catch (err) {
+    // Rollback on error
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackErr) {
+      console.error('Rollback error:', rollbackErr);
+    }
     next(err);
+  } finally {
+    client.release();
   }
 };
 

@@ -28,6 +28,13 @@ function LeadList({ leads }) {
     return icons[status] || '•';
   };
 
+  const handleRowKeyDown = (e, leadId) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      navigate(`/lead/${leadId}`);
+    }
+  };
+
   return (
     <div className="lead-table-container">
       <table className="lead-table">
@@ -46,8 +53,11 @@ function LeadList({ leads }) {
           {leads.map((lead) => (
             <tr
               key={lead.id}
+              className="lead-table-row"
               onClick={() => navigate(`/lead/${lead.id}`)}
-              style={{ cursor: 'pointer' }}
+              onKeyDown={(e) => handleRowKeyDown(e, lead.id)}
+              tabIndex={0}
+              role="button"
             >
               <td><strong>{lead.full_name}</strong></td>
               <td>{lead.phone_number || '-'}</td>

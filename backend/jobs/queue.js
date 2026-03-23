@@ -135,13 +135,30 @@ messageQueue.process(async (job) => {
       throw new Error(result.error || 'Failed to send message');
     }
 
-    // Save message record to database
-    const msgResult = await db.query(
-      `INSERT INTO messages (lead_id, campaign_id, phone_number, message_id, status)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [leadId, campaignId, normalizedPhone, result.messageId, 'sent']
+    // FIX #1: Get campaign_lead_id for proper tracking
+    const campaignLeadResult = await db.query(
+      `SELECT id FROM campaign_leads 
+       WHERE campaign_id = $1 AND lead_id = $2`,
+      [campaignId, leadId]
     );
+    
+    const campaign_lead_id = campaignLeadResult.rows[0]?.id || null;
+
+    // Save message record to database with campaign_lead_id
+    const msgResult = await db.query(
+      `INSERT INTO messages (campaign_lead_id, lead_id, campaign_id, phone_number, whatsapp_message_id, status)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [campaign_lead_id, leadId, campaignId, normalizedPhone, result.messageId, 'sent']
+    );
+
+    // Update campaign_lead status to 'queued'
+    if (campaign_lead_id) {
+      await db.query(
+        `UPDATE campaign_leads SET status = 'sent' WHERE id = $1`,
+        [campaign_lead_id]
+      );
+    }
 
     console.log(`[Queue] Message sent successfully - Campaign: ${campaignId}, Lead: ${leadId}, MessageId: ${result.messageId}`);
 
@@ -154,13 +171,29 @@ messageQueue.process(async (job) => {
   } catch (error) {
     console.error(`[Queue] Error sending message job ${job.id}:`, error.message);
 
-    // Save failed message record
+    // Save failed message record with campaign_lead_id
     try {
-      await db.query(
-        `INSERT INTO messages (lead_id, campaign_id, phone_number, status)
-         VALUES ($1, $2, $3, $4)`,
-        [leadId, campaignId, phoneNumber, 'failed']
+      const campaignLeadResult = await db.query(
+        `SELECT id FROM campaign_leads 
+         WHERE campaign_id = $1 AND lead_id = $2`,
+        [campaignId, leadId]
       );
+      
+      const campaign_lead_id = campaignLeadResult.rows[0]?.id || null;
+
+      await db.query(
+        `INSERT INTO messages (campaign_lead_id, lead_id, campaign_id, phone_number, status, error_message)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [campaign_lead_id, leadId, campaignId, phoneNumber, 'failed', error.message]
+      );
+
+      // Update campaign_lead status to 'failed'
+      if (campaign_lead_id) {
+        await db.query(
+          `UPDATE campaign_leads SET status = 'failed' WHERE id = $1`,
+          [campaign_lead_id]
+        );
+      }
     } catch (dbErr) {
       console.error(`[Queue] Failed to save error message to DB:`, dbErr.message);
     }

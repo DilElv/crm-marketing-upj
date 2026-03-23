@@ -19,11 +19,18 @@ function CampaignList({ campaigns }) {
   return (
     <div className="campaign-grid">
       {campaigns.map((campaign) => (
-        <div
+        <button
           key={campaign.id}
           className="campaign-card"
           onClick={() => navigate(`/campaign/${campaign.id}`)}
-          style={{ cursor: 'pointer' }}
+          style={{ 
+            cursor: 'pointer',
+            background: 'inherit',
+            border: 'inherit',
+            padding: 'inherit',
+            textAlign: 'left',
+            fontFamily: 'inherit'
+          }}
         >
           <div className="campaign-header">
             <h3>📬 {campaign.name}</h3>
@@ -60,11 +67,11 @@ function CampaignList({ campaigns }) {
           </div>
 
           <div className="campaign-actions">
-            <button className="btn-secondary" onClick={(e) => e.stopPropagation()}>
+            <span className="btn-secondary" onClick={(e) => e.stopPropagation()}>
               View Details →
-            </button>
+            </span>
           </div>
-        </div>
+        </button>
       ))}
     </div>
   );

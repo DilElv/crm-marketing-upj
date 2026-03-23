@@ -23,6 +23,14 @@
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
+  cursor: default;
+  user-select: none;
+}
+
+/* Ensure all text in stat cards are not underlined */
+.stat-card * {
+  text-decoration: none;
+  cursor: default;
 }
 
 .stat-card::before {
@@ -48,6 +56,9 @@
   color: var(--neutral-500);
   margin-bottom: 0.5rem;
   letter-spacing: 0.5px;
+  text-decoration: none;
+  cursor: default;
+  user-select: text;
 }
 
 .stat-card .stat-value {
@@ -58,6 +69,9 @@
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
+  text-decoration: none;
+  cursor: default;
+  user-select: text;
 }
 
 .stat-card .stat-percent {
@@ -65,6 +79,9 @@
   font-size: 0.875rem;
   color: var(--success);
   font-weight: 500;
+  text-decoration: none;
+  cursor: default;
+  user-select: text;
 }
 
 .stat-card .stat-percent.negative {

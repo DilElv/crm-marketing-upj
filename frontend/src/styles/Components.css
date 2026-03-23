@@ -180,6 +180,15 @@
   border-color: var(--primary);
 }
 
+.campaign-card:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.campaign-card:active {
+  transform: translateY(-2px);
+}
+
 .campaign-header {
   display: flex;
   justify-content: space-between;
@@ -372,10 +381,16 @@
 
 .lead-table tbody tr {
   transition: all 0.2s;
+  cursor: pointer;
 }
 
 .lead-table tbody tr:hover {
   background: var(--neutral-50);
+}
+
+.lead-table tbody tr.lead-table-row:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: -2px;
 }
 
 /* Badges */
